@@ -15,7 +15,9 @@ var userSchema = new mongoose.Schema(
       unique: true,
     },
     mobile: {
-      type: Number,
+      type: String,
+      trim: true,
+      unique: true,
     },
     password: {
       type: String,
@@ -24,6 +26,8 @@ var userSchema = new mongoose.Schema(
     refreshToken: String,
     profileImg: String,
     cloudinary_id: String,
+    otp: String,
+    otpExpiration: Date,
   },
   { timestamps: true }
 );

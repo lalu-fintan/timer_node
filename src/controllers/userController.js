@@ -4,6 +4,7 @@ const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const { genreateRefreshToken } = require("../helper/refreshToken");
 const cloudinary = require("../config/cloudinary_Config");
+const client = require("../config/twilio_Config");
 
 const register = asyncHandler(async (req, res) => {
   const { email, password } = req.body;
@@ -93,17 +94,17 @@ const userProfile = async (req, res) => {
     const result = await cloudinary.uploader.upload(req.file.path);
     console.log(result);
 
-    // let user = await User.findOneAndUpdate(
-    //   id,
-    //   {
-    //     profileImg: result.secure_url,
-    //     cloudinary_id: result.public_id,
-    //   },
-    //   { new: true }
-    // );
+    const user = await User.findByIdAndUpdate(
+      id,
+      {
+        profileImg: result.secure_url,
+        cloudinary_id: result.public_id,
+      },
 
-    // res.status(200).json(user);
-    res.json({ imageUrl: result.secure_url });
+      { new: true }
+    );
+
+    res.status(200).json(user);
   } catch (error) {
     res.status(500).json({ error: "Something went wrong" });
   }
@@ -143,6 +144,74 @@ const updateUser = asyncHandler(async (req, res) => {
   }
 });
 
+const sendOTP = asyncHandler(async (req, res) => {
+  const { mobile } = req.body;
+  const { id } = req.user;
+
+  // Generate OTP
+  const otp = Math.floor(10000 + Math.random() * 900000);
+
+  // Save OTP and expiration time in the database
+  const otpExpiration = new Date();
+  otpExpiration.setMinutes(otpExpiration.getMinutes() + 10);
+
+  try {
+    const user = await User.findByIdAndUpdate(
+      id,
+      { mobile, otp, otpExpiration },
+      { new: true }
+    );
+    console.log(user);
+
+    // Send OTP via SMS using Twilio
+    await client.messages.create({
+      body: `Your OTP is: ${otp}`,
+      from: process.env.MOBILE_NUMBER,
+      to: user.mobile,
+    });
+
+    res.status(200).json({ message: "OTP sent successfully" });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Error sending OTP" });
+  }
+});
+
+const verifyOTP = asyncHandler(async (req, res) => {
+  const { mobile, enteredOTP } = req.body;
+
+  try {
+    const user = await User.findOne({ mobile });
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    if (user.otp !== enteredOTP) {
+      return res.status(401).json({ message: "Invalid OTP" });
+    }
+
+    if (user.otpExpiration < new Date()) {
+      return res.status(401).json({ message: "OTP has expired" });
+    }
+
+    await client.messages.create({
+      body: `otp verified successfully ${user.email}`,
+      from: process.env.MOBILE_NUMBER,
+      to: user.mobile,
+    });
+    // Clear OTP and expiration time after successful verification
+    user.otp = undefined;
+    user.otpExpiration = undefined;
+    await user.save();
+
+    res.status(200).json({ message: "OTP verified successfully" });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Error verifying OTP" });
+  }
+});
+
 module.exports = {
   register,
   login,
@@ -151,4 +220,6 @@ module.exports = {
   userProfile,
   getUser,
   getUserById,
+  sendOTP,
+  verifyOTP,
 };

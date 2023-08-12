@@ -6,7 +6,7 @@ const { notFound, errorHandler } = require("../middleware/errorHandler");
 const mainRouter = (app) => {
   app.use(morgan("dev"));
   app.use("/api/user", userRouter);
-  app.use("/api", googleRouter);
+  app.use("/", googleRouter);
 
   //   error handler
   app.use(notFound);
